@@ -29,6 +29,6 @@ ENDMACRO(TEST_MACRO)
 # file_name_test.cpp ==> CBTEST_MACRO(file_name)
 
 # User's Libraries
-SET(project_libraries ${PROJECT_NAME})
+SET(project_libraries bcachefs)
 
 TEST_MACRO(symbolic ${project_libraries})

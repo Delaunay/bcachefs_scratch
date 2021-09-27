@@ -1,5 +1,5 @@
-#ifndef PROJECT_TEST_SRC_LOGGER_HEADER
-#define PROJECT_TEST_SRC_LOGGER_HEADER
+#ifndef BCACHE_FS_SRC_LOGGER_HEADER
+#define BCACHE_FS_SRC_LOGGER_HEADER
 
 #include <string>
 #include <vector>
@@ -7,7 +7,7 @@
 // only use the fmt header
 #include <spdlog/fmt/bundled/core.h>
 
-namespace sym
+namespace bcachefs
 {
 
 struct CodeLocation{
@@ -21,7 +21,7 @@ struct CodeLocation{
     std::string function_long;
 };
 
-#define LOC sym::CodeLocation(__FILE__, __FUNCTION__, __LINE__, __PRETTY_FUNCTION__)
+#define LOC bcachefs::CodeLocation(__FILE__, __FUNCTION__, __LINE__, __PRETTY_FUNCTION__)
 
 enum class LogLevel{
     TRACE,
@@ -55,13 +55,13 @@ void log(LogLevel level, CodeLocation const& loc, const char* fmt, const Args& .
     spdlog_log(level, msg);
 }
 
-#define SYM_LOG_HELPER(level, ...) log(level, LOC, __VA_ARGS__)
+#define BCACHEFS_LOG_HELPER(level, ...) log(level, LOC, __VA_ARGS__)
 
-#define info(...)       SYM_LOG_HELPER(sym::LogLevel::INFO, __VA_ARGS__)
-#define warn(...)       SYM_LOG_HELPER(sym::LogLevel::WARN, __VA_ARGS__)
-#define debug(...)      SYM_LOG_HELPER(sym::LogLevel::DEBUG, __VA_ARGS__)
-#define error(...)      SYM_LOG_HELPER(sym::LogLevel::ERROR, __VA_ARGS__)
-#define critical(...)   SYM_LOG_HELPER(sym::LogLevel::CRITICAL, __VA_ARGS__)
+#define info(...)       BCACHEFS_LOG_HELPER(bcachefs::LogLevel::INFO, __VA_ARGS__)
+#define warn(...)       BCACHEFS_LOG_HELPER(bcachefs::LogLevel::WARN, __VA_ARGS__)
+#define debug(...)      BCACHEFS_LOG_HELPER(bcachefs::LogLevel::DEBUG, __VA_ARGS__)
+#define error(...)      BCACHEFS_LOG_HELPER(bcachefs::LogLevel::ERROR, __VA_ARGS__)
+#define critical(...)   BCACHEFS_LOG_HELPER(bcachefs::LogLevel::CRITICAL, __VA_ARGS__)
 
 
 // Exception that shows the backtrace when .what() is called
@@ -80,7 +80,7 @@ private:
 
 // Make a simple exception
 #define NEW_EXCEPTION(name)\
-    class name: public sym::Exception{\
+    class name: public bcachefs::Exception{\
     public:\
         template<typename ... Args>\
         name(const char* fmt, const Args& ... args):\

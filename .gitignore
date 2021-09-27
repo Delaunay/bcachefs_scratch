@@ -26,3 +26,5 @@ Makefile*
 /gen/
 /old*/
 /*build*/
+dataset.img
+*.img

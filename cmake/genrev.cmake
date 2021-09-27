@@ -22,8 +22,8 @@ if(NOT BUILDDIR)
   set(BUILDDIR ${CMAKE_BINARY_DIR})
 endif()
 
-SET(CONF_FILE_LOC "${CMAKE_SOURCE_DIR}/src/0.01.h.in.cmake")
-SET(CONF_BUILD_LOC "${BUILDDIR}/0.01.h")
+SET(CONF_FILE_LOC "${CMAKE_SOURCE_DIR}/src/version.h.in.cmake")
+SET(CONF_BUILD_LOC "${BUILDDIR}/version.h")
 
 if(WITHOUT_GIT)
   set(rev_date "1970-01-01 00:00:00 +0000")
