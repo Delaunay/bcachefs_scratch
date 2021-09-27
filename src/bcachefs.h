@@ -4,8 +4,12 @@
 
 #include "cbcachefs.h"
 #include <string>
+#include <vector>
 
-using String     = std::string;
+template <typename V>
+using Array  = std::vector<V>;
+using String = std::string;
+
 using Superblock = struct bch_sb;
 
 using SuperBlockFieldType  = enum bch_sb_field_type;
@@ -34,6 +38,8 @@ struct BCacheFSReader {
     SuperBlockFieldBase const *find_superblock_field(SuperBlockFieldType type) const;
 
     JournalSetEntry const *find_journal_entry(SuperBlockFieldClean const *field, JournalSetEntryType type) const;
+
+    Array<JournalSetEntry const *> find_btree_roots(SuperBlockFieldClean const *field) const;
 
     // extract the size of a btree node
     uint64_t btree_node_size() const {
