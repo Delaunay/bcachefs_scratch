@@ -18,6 +18,10 @@ using SuperBlockFieldClean = struct bch_sb_field_clean;
 
 using JournalSetEntryType = enum bch_jset_entry_type;
 using JournalSetEntry     = struct jset_entry;
+using BTreeValue          = struct bch_val;
+using BTreePtr            = struct bch_btree_ptr_v2;
+using BKey                = struct bkey;
+using BTreeNode           = struct btree_node;
 
 inline uint64_t extract_bitflag(const uint64_t bitfield, uint8_t first_bit, uint8_t last_bit) {
     return bitfield << (sizeof(bitfield) * 8 - last_bit) >> (sizeof(bitfield) * 8 - last_bit + first_bit);
@@ -40,6 +44,10 @@ struct BCacheFSReader {
     JournalSetEntry const *find_journal_entry(SuperBlockFieldClean const *field, JournalSetEntryType type) const;
 
     Array<JournalSetEntry const *> find_btree_roots(SuperBlockFieldClean const *field) const;
+
+    BTreePtr const *traverse_btree(JournalSetEntry const *entry);
+
+    BTreeNode *load_btree_node(BTreePtr const *ptr);
 
     // extract the size of a btree node
     uint64_t btree_node_size() const {
