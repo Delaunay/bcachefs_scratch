@@ -188,11 +188,13 @@ BKey const *BTreeIterator::_next_key() {
     // get next key in the current bset
     auto key = _key_iterator.next();
     if (key != nullptr) {
+
         // we are pointing to another btree
         if (key->type == KEY_TYPE_btree_ptr_v2) {
             debug("entering a new node");
             auto value = get_value(_iter.get(), (const BKey *)key);
             _children.emplace_back(_reader, (const BTreePtr *)value, _type);
+            return _next_key();
         }
 
         float v = *((float const *)key);
@@ -206,6 +208,7 @@ BKey const *BTreeIterator::_next_key() {
     //  2. we a have reached the end of the previous bset
     auto bset = _bset_iterator.next(_reader.btree_block_size());
     if (bset != nullptr) {
+        debug("iterate through a bset: {:0x}", INT(bset));
         _key_iterator = BKeyIterator(_iter.get(), bset);
         return _next_key();
     }

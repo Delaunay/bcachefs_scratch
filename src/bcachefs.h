@@ -3,11 +3,14 @@
 #define INCLUDE_BENZINA_BCACHEFS_READER_H
 
 #include "cbcachefs.h"
+#include "logger.h"
 
 #include <memory>
 #include <string>
 #include <type_traits>
 #include <vector>
+
+#define INT(x) (*(uint64_t *)(x))
 
 template <typename V>
 using Array  = std::vector<V>;
@@ -176,6 +179,8 @@ struct BTreeIterator {
     struct BSetIterator {
         BSetIterator() {}
         BSetIterator(BTreeNode const *node, uint64_t size):
+            // node + sizeof(BTreeNode)
+            // &node->keys
             iter((BSet const *)(&node->keys)), end((BSet const *)(node + size)), node(node) {}
 
         BSet const *offset(uint64_t block_size) {
@@ -186,7 +191,7 @@ struct BTreeIterator {
             _cb -= (uint64_t)node;
 
             // standard next
-            _cb += sizeof(*v) + iter->u64s * BCH_U64S_SIZE;
+            _cb += sizeof(*v) + v->u64s * BCH_U64S_SIZE;
 
             _cb += block_size - (uint64_t)_cb % block_size +
                    // skip btree_node_entry csum
@@ -198,6 +203,7 @@ struct BTreeIterator {
 
         BSet const *next(uint64_t block_size) {
             if (iter == end) {
+                info("Bset is finished");
                 return nullptr;
             }
 
@@ -218,12 +224,15 @@ struct BTreeIterator {
             iter((BKey const *)(bset + sizeof(*bset))), end((BKey const *)(bset + bset->u64s * BCH_U64S_SIZE)) {}
 
         BKey const *next() {
-            if (iter == end) {
+            if (iter == nullptr || iter == end) {
+                debug("Iterator is finished");
                 return nullptr;
             }
 
             auto val = *iter;
             ++iter;
+
+            debug("{} {} {}", INT(iter.current), INT(end.current), INT(val));
             return val;
         }
 
