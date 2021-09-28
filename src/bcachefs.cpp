@@ -6,68 +6,6 @@
 #include <cstdlib>
 
 // ========================================================================================
-// Utils
-// ----------------------------------------------------------------------------------------
-
-// Lookup the size spec given a type
-template <typename T>
-struct u64s_spec get_spec() {
-    struct u64s_spec spec;
-    return spec;
-}
-
-template <>
-struct u64s_spec get_spec<JournalSetEntry>() {
-    return U64S_JSET_ENTRY;
-}
-
-template <>
-struct u64s_spec get_spec<SuperBlockFieldBase>() {
-    return U64S_BCH_SB_FIELD;
-}
-
-template <>
-struct u64s_spec get_spec<BKey>() {
-    return U64S_BKEY;
-}
-
-template <typename T>
-uint64_t get_u64s(T *ptr) {
-    return ptr->u64s + get_spec<T>().start;
-}
-
-template <>
-uint64_t get_u64s(BTreePtr *ptr) {
-    return sizeof(BTreePtr);
-}
-
-template <typename T>
-struct FieldIterator {
-
-    template <typename U>
-    FieldIterator(U c): current((T *)c) {}
-
-    bool operator!=(FieldIterator const &b) const { return current != b.current; }
-
-    T *operator->() { return current; }
-
-    T *operator*() { return current; }
-
-    FieldIterator &operator++() {
-        next();
-        return *this;
-    }
-
-    inline void next() {
-        // The the size of the struct and move past it
-        uint64_t u64s = get_u64s<T>(current);
-        current       = (T *)((const uint8_t *)current + u64s * BCH_U64S_SIZE);
-    }
-
-    T *current;
-};
-
-// ========================================================================================
 
 BCacheFSReader::BCacheFSReader(String const &file) {
     _file   = fopen(file.c_str(), "rb");
@@ -86,7 +24,6 @@ BCacheFSReader::BCacheFSReader(String const &file) {
     // - clean
     // - last one look like a dummy struct
     auto field = (const SuperBlockFieldClean *)find_superblock_field(BCH_SB_FIELD_clean);
-
     assert(field != nullptr);
 
     debug("Look for journal entry");
@@ -105,18 +42,7 @@ BCacheFSReader::BCacheFSReader(String const &file) {
     // - btree_root inodes
     // - btree_root dirents
     // - btree_root alloc
-    auto entry = find_journal_entry(field, BCH_JSET_ENTRY_btree_root);
-
-    assert(entry != nullptr);
-    assert(entry->btree_id == BTREE_ID_extents);
-
-    debug("Look for the btree ptr pointing to the node");
-    auto btree_ptr = traverse_btree(entry);
-
-    debug("load the btree node");
-    BTreeNode *extend_node = load_btree_node(btree_ptr);
-
-    // BCacheFS_iter_next_btree_ptr
+    _btree_roots = find_journal_entries(field);
 }
 
 BCacheFSReader::~BCacheFSReader() {
@@ -163,34 +89,7 @@ SuperBlockFieldBase const *BCacheFSReader::find_superblock_field(SuperBlockField
     return nullptr;
 }
 
-JournalSetEntry const *BCacheFSReader::find_journal_entry(SuperBlockFieldClean const *field,
-                                                          JournalSetEntryType         type) const {
-
-    auto iter = FieldIterator<JournalSetEntry>((const uint8_t *)field + sizeof(SuperBlockFieldClean));
-    auto end  = FieldIterator<JournalSetEntry>(field + field->field.u64s * BCH_U64S_SIZE);
-
-    for (; iter != end; ++iter) {
-        debug("(size: {}) (type: {}) looking for {}", iter->u64s, iter->type, type);
-
-        if (iter->type == type) {
-            return *iter;
-        }
-    }
-
-    return nullptr;
-}
-
-BTreeNode *BCacheFSReader::load_btree_node(BTreePtr const *ptr) {
-    auto btree_node = malloc(btree_node_size());
-
-    uint64_t offset = ptr->start->offset * BCH_SECTOR_SIZE;
-    fseek(_file, (long)offset, SEEK_SET);
-    fread(btree_node, btree_node_size(), 1, _file);
-
-    return (BTreeNode *)btree_node;
-}
-
-BTreePtr const *BCacheFSReader::traverse_btree(JournalSetEntry const *entry) {
+BTreePtr const *BCacheFSReader::find_btree_root(JournalSetEntry const *entry) const {
     // benz_bch_first_bch_val(&jset_entry->start->k, BKEY_U64s);
     auto key = &entry->start->k;
 
@@ -201,20 +100,18 @@ BTreePtr const *BCacheFSReader::traverse_btree(JournalSetEntry const *entry) {
     auto key_u64s = BKEY_U64s;
     auto cursor   = FieldIterator<BTreePtr>((const uint8_t *)key + key_u64s * BCH_U64S_SIZE);
 
-    // Subsequent values are BTreePtr
-    // What are we looking for here
-    while (cursor != end) {
-        if (!(*cursor == nullptr && cursor->start->unused)) {
-            break;
-        }
-
+    // Look for the value inside this journal entry that holds
+    // the btree_root pointer
+    // usually it is the first value anyway
+    while (cursor != end && *cursor && cursor->start->unused) {
         ++cursor;
     }
 
+    debug("Found BTree Root Loc: (unused: {}) (offset: {})", cursor->start->unused, cursor->start->offset);
     return *cursor;
 }
 
-Array<JournalSetEntry const *> BCacheFSReader::find_btree_roots(SuperBlockFieldClean const *field) const {
+Array<JournalSetEntry const *> BCacheFSReader::find_journal_entries(SuperBlockFieldClean const *field) const {
 
     auto iter = FieldIterator<JournalSetEntry>((const uint8_t *)field + sizeof(SuperBlockFieldClean));
     auto end  = FieldIterator<JournalSetEntry>(field + field->field.u64s * BCH_U64S_SIZE);
@@ -222,13 +119,153 @@ Array<JournalSetEntry const *> BCacheFSReader::find_btree_roots(SuperBlockFieldC
     Array<JournalSetEntry const *> out(BTREE_ID_NR);
     auto                           type = BCH_JSET_ENTRY_btree_root;
 
-    for (; iter != end; ++iter) {
+    for (; iter < end; ++iter) {
         debug("(size: {}) (type: {}) looking for {}", iter->u64s, iter->type, type);
 
         if (iter->type == type) {
             out[iter->btree_id] = *iter;
         }
+
+        if (iter->u64s <= 0) {
+            break;
+        }
     }
 
     return out;
+}
+
+BTreeIterator BCacheFSReader::iterator(BTreeType type) const {
+    auto entry = _btree_roots[type];
+
+    debug("Look for the btree ptr pointing to the node");
+    auto btree_ptr = find_btree_root(entry);
+
+    return BTreeIterator(*this, btree_ptr, type);
+}
+
+// ========================================================================================
+// Iterator
+// ----------------------------------------------------------------------------------------
+
+BTreeIterator::BTreeIterator(BCacheFSReader const &reader, const BTreePtr *root_ptr, BTreeType type):
+    _reader(reader), _type(type), _ptr(root_ptr) {
+
+    debug("load the btree node");
+    _iter = load_btree_node(root_ptr);
+
+    // // BCacheFS_iter_next_bset
+    _bset_iterator = BSetIterator(_iter.get(), _reader.btree_node_size());
+}
+
+BTreeValue const *get_value(BTreeNode const *node, const BKey *key) {
+    auto format = node->format;
+    auto value  = (const BKey *)key;
+
+    uint8_t key_u64s = 0;
+    if (value->format == KEY_FORMAT_LOCAL_BTREE) {
+        key_u64s = format.key_u64s;
+    } else {
+        key_u64s = BKEY_U64s;
+    }
+
+    return (BTreeValue const *)(value + key_u64s);
+}
+
+BKey const *BTreeIterator::_next_key() {
+    if (has_children()) {
+        BTreeIterator *nodeiter = &_children[_children.size() - 1];
+        auto           key      = nodeiter->_next_key();
+
+        // That node is over, get next key
+        if (key == nullptr) {
+            _children.pop_back();
+            return _next_key();
+        }
+
+        return key;
+    }
+
+    // get next key in the current bset
+    auto key = _key_iterator.next();
+    if (key != nullptr) {
+        // we are pointing to another btree
+        if (key->type == KEY_TYPE_btree_ptr_v2) {
+            debug("entering a new node");
+            auto value = get_value(_iter.get(), (const BKey *)key);
+            _children.emplace_back(_reader, (const BTreePtr *)value, _type);
+        }
+
+        float v = *((float const *)key);
+        debug("returning key {} {}", v, key != nullptr);
+        return key;
+    }
+    debug("fetching next bset");
+
+    // _key == null that means
+    //  1. we need to find the first bset
+    //  2. we a have reached the end of the previous bset
+    auto bset = _bset_iterator.next(_reader.btree_block_size());
+    if (bset != nullptr) {
+        _key_iterator = BKeyIterator(_iter.get(), bset);
+        return _next_key();
+    }
+
+    debug("bset is done");
+    // _bset is null
+    // we finished our current node
+    return nullptr;
+}
+
+std::shared_ptr<BTreeNode> BTreeIterator::load_btree_node(BTreePtr const *ptr) {
+    auto size       = _reader.btree_node_size();
+    auto btree_node = malloc(size);
+
+    uint64_t offset = ptr->start->offset * BCH_SECTOR_SIZE;
+    fseek(_reader._file, (long)offset, SEEK_SET);
+    fread(btree_node, size, 1, _reader._file);
+
+    return std::shared_ptr<BTreeNode>((BTreeNode *)btree_node, free);
+}
+
+BSet const *next(BSet const *iter, uint64_t block_size, BTreeNode const *node) {
+    const uint8_t *_cb = (const uint8_t *)iter;
+
+    // Bset is located after the blocksize
+    // set it a the beginning of the first block
+
+    // uint8_t this will wrap around
+    _cb -= (uint64_t)node;
+
+    // standard next
+    _cb += sizeof(*iter) + iter->u64s * BCH_U64S_SIZE;
+
+    _cb += block_size - (uint64_t)_cb % block_size +
+           // skip btree_node_entry csum
+           sizeof(struct bch_csum);
+
+    _cb += (uint64_t)node;
+    return (BSet const *)_cb;
+}
+
+BSet const *BTreeIterator::find_bset(BTreeNode const *node) {
+    auto btsize = _reader.btree_node_size();
+
+    auto iter       = (BSet const *)&node->keys;
+    auto end        = (BSet const *)(node + btsize);
+    auto block_size = _reader.btree_block_size();
+
+    const struct bset *c = nullptr;
+
+    // find a bset with data in it (u64s > 0)
+    while (iter != end) {
+        if (iter->u64s > 0) {
+            debug("bset found");
+            break;
+        }
+
+        iter = ::next(iter, block_size, node);
+        debug("bset next");
+    };
+
+    return iter;
 }

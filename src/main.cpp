@@ -26,7 +26,17 @@ int main() {
     info("version date  : {}", _DATE);
     info("version branch: {}", _BRANCH);
 
-    BCacheFSReader("dataset.img");
+    BCacheFSReader reader("dataset.img");
+
+    BTreeIterator iter = reader.iterator(BTREE_ID_extents);
+
+    auto bkey = iter.next_key();
+    while (bkey != nullptr) {
+        printf("bkey: u:%u, f:%u, t:%u, s:%u, o:%llu\n", bkey->u64s, bkey->format, bkey->type, bkey->size,
+               bkey->p.offset);
+
+        bkey = iter.next_key();
+    }
 
     return 0;
 }
