@@ -10,7 +10,7 @@
 #include <type_traits>
 #include <vector>
 
-#define INT(x) (*(uint64_t *)(x))
+#define INT(x) ((uint64_t)(x))
 
 template <typename V>
 using Array  = std::vector<V>;
@@ -117,6 +117,8 @@ struct FieldIterator {
     template <typename U>
     FieldIterator(U c): current((T *)c) {}
 
+    FieldIterator(T *c): current(c) {}
+
     FieldIterator() {}
 
     bool operator!=(FieldIterator const &b) const { return current != b.current; }
@@ -124,6 +126,8 @@ struct FieldIterator {
     bool operator==(FieldIterator const &b) const { return current == b.current; }
 
     bool operator<(FieldIterator const &b) const { return current < b.current; }
+
+    bool operator>=(FieldIterator const &b) const { return current >= b.current; }
 
     T *operator->() { return current; }
 
@@ -144,6 +148,31 @@ struct FieldIterator {
 };
 
 BTreeValue const *get_value(BTreeNode const *node, const BKey *key);
+
+// Iterates over all the BKeys inside a BSet
+struct BKeyIterator {
+    BKeyIterator() {}
+    BKeyIterator(BSet const *bset);
+
+    BKey const *next();
+
+    FieldIterator<BKey const> iter;
+    FieldIterator<BKey const> end;
+};
+
+// Iterates over all the BSet inside a BNode
+struct BSetIterator {
+    BSetIterator() {}
+    BSetIterator(BTreeNode const *node, uint64_t size);
+
+    BSet const *offset(uint64_t block_size);
+
+    BSet const *next(uint64_t block_size);
+
+    FieldIterator<BSet const> iter;
+    FieldIterator<BSet const> end;
+    BTreeNode const *         node;
+};
 
 struct BTreeIterator {
 
@@ -174,71 +203,6 @@ struct BTreeIterator {
     BKey const *_next_key();
 
     std::shared_ptr<BTreeNode> load_btree_node(BTreePtr const *ptr);
-
-    // Iterates over all the BSet inside a BNode
-    struct BSetIterator {
-        BSetIterator() {}
-        BSetIterator(BTreeNode const *node, uint64_t size):
-            // node + sizeof(BTreeNode)
-            // &node->keys
-            iter((BSet const *)(&node->keys)), end((BSet const *)(node + size)), node(node) {}
-
-        BSet const *offset(uint64_t block_size) {
-            BSet const *v = *iter;
-
-            const uint8_t *_cb = (const uint8_t *)v;
-
-            _cb -= (uint64_t)node;
-
-            // standard next
-            _cb += sizeof(*v) + v->u64s * BCH_U64S_SIZE;
-
-            _cb += block_size - (uint64_t)_cb % block_size +
-                   // skip btree_node_entry csum
-                   sizeof(struct bch_csum);
-
-            _cb += (uint64_t)node;
-            return (BSet const *)_cb;
-        }
-
-        BSet const *next(uint64_t block_size) {
-            if (iter == end) {
-                info("Bset is finished");
-                return nullptr;
-            }
-
-            auto val     = *iter;
-            iter.current = offset(block_size);
-            return val;
-        }
-
-        FieldIterator<BSet const> iter;
-        FieldIterator<BSet const> end;
-        BTreeNode const *         node;
-    };
-
-    // Iterates over all the BKeys inside a BSet
-    struct BKeyIterator {
-        BKeyIterator() {}
-        BKeyIterator(BTreeNode const *node, BSet const *bset):
-            iter((BKey const *)(bset + sizeof(*bset))), end((BKey const *)(bset + bset->u64s * BCH_U64S_SIZE)) {}
-
-        BKey const *next() {
-            if (iter == nullptr || iter == end) {
-                debug("Iterator is finished");
-                return nullptr;
-            }
-
-            auto val = *iter;
-            ++iter;
-
-            debug("{} {} {}", INT(iter.current), INT(end.current), INT(val));
-            return val;
-        }
-
-        FieldIterator<BKey const> iter;
-        FieldIterator<BKey const> end;
-    };
 
     bool has_children() const { return _children.size() > 0; }
 
