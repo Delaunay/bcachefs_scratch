@@ -5,6 +5,7 @@
 
 #include <cassert>
 #include <cstdio>
+#include <iostream>
 
 int main() {
     info("version hash  : {}", _HASH);
@@ -35,6 +36,8 @@ int main() {
         while (bkey != nullptr) {
             printf("bkey: u:%u, f:%u, t:%u, s:%u, o:%lu\n", bkey->u64s, bkey->format, bkey->type, bkey->size,
                    bkey->p.offset);
+
+            std::cout << iter.directory(bkey) << "\n";
 
             bkey = iter.next_key();
         }

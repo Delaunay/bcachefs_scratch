@@ -25,11 +25,12 @@ using SuperBlockFieldClean = struct bch_sb_field_clean;
 using JournalSetEntryType = enum bch_jset_entry_type;
 using JournalSetEntry     = struct jset_entry;
 using BTreeType           = enum btree_id;
-using BTreeValue          = struct bch_val;
-using BTreePtr            = struct bch_btree_ptr_v2;
 
+using BTreePtr = struct bch_btree_ptr_v2;
 using BKeyType = enum bch_bkey_type;
 using BKey     = struct bkey;
+using BValue   = struct bch_val;
+using BDirEnt  = struct bch_dirent;
 
 using BTreeNode = struct btree_node;
 using BSet      = struct bset;
@@ -143,7 +144,7 @@ struct FieldIterator {
     uint8_t const *current = nullptr;
 };
 
-BTreeValue const *get_value(BTreeNode const *node, const BKey *key);
+BValue const *get_value(BTreeNode const *node, const BKey *key);
 
 // Iterates over all the BKeys inside a BSet
 struct BKeyIterator {
@@ -170,6 +171,20 @@ struct BSetIterator {
     BTreeNode const *         node;
 };
 
+struct DirectoryEntry {
+    uint64_t       parent_inode;
+    uint64_t       inode;
+    uint8_t        type;
+    const uint8_t *name;
+};
+
+inline std::ostream &operator<<(std::ostream &out, DirectoryEntry const &dir) {
+    out << dir.parent_inode << " ";
+    out << dir.inode << " ";
+    out << dir.type << " ";
+    return out << (const char *)dir.name;
+}
+
 // Btree
 //   Node - Chunk in the FS (fread - file) | BCacheFS_next_iter (read next node)
 //      Set BKey + BValue   benz_bch_next_bkey + _BCacheFS_iter_next_bch_val
@@ -184,12 +199,14 @@ struct BTreeIterator {
 
     ~BTreeIterator() {}
 
-    BTreeValue const *next() { return next_value(); }
+    BValue const *next() { return next_value(); }
 
     BKey const *next_key() { return _next_key(); }
 
+    DirectoryEntry directory(BKey const *key);
+
     private:
-    BTreeValue const *next_value() {
+    BValue const *next_value() {
         auto key = _next_key();
         return get_value(_iter.get(), key);
     }
@@ -199,6 +216,14 @@ struct BTreeIterator {
     std::shared_ptr<BTreeNode> load_btree_node(BTreePtr const *ptr);
 
     bool has_children() const { return _children.size() > 0; }
+
+    // get top level iterator
+    BTreeIterator &iterator() {
+        if (has_children()) {
+            return _children[_children.size()];
+        }
+        return *this;
+    }
 
     private:
     BCacheFSReader const &_reader;

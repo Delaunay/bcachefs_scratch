@@ -50,7 +50,7 @@ void log(LogLevel level, CodeLocation const &loc, const char *fmt, const Args &.
     spdlog_log(level, msg);
 }
 
-#define BCACHEFS_LOGS 0
+#define BCACHEFS_LOGS 1
 
 #if BCACHEFS_LOGS
 #    define BCACHEFS_LOG_HELPER(level, ...) log(level, LOC, __VA_ARGS__)

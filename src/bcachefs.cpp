@@ -1,6 +1,8 @@
 #include "bcachefs.h"
 #include "logger.h"
 
+#include <iostream>
+
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
@@ -238,18 +240,17 @@ BTreeIterator::BTreeIterator(BCacheFSReader const &reader, const BTreePtr *root_
     _bset_iterator = BSetIterator(_iter.get(), _reader.btree_node_size());
 }
 
-BTreeValue const *get_value(BTreeNode const *node, const BKey *key) {
+BValue const *get_value(BTreeNode const *node, const BKey *key) {
     auto format = node->format;
-    auto value  = (const BKey *)key;
 
     uint8_t key_u64s = 0;
-    if (value->format == KEY_FORMAT_LOCAL_BTREE) {
+    if (key->format == KEY_FORMAT_LOCAL_BTREE) {
         key_u64s = format.key_u64s;
     } else {
         key_u64s = BKEY_U64s;
     }
 
-    return (BTreeValue const *)(value + key_u64s);
+    return (BValue const *)((uint8_t const *)key + key_u64s);
 }
 
 BKey const *BTreeIterator::_next_key() {
@@ -268,6 +269,8 @@ BKey const *BTreeIterator::_next_key() {
 
     // get next key in the current bset
     auto key = _key_iterator.next();
+    std::cout << directory(key) << std::endl;
+
     if (key != nullptr) {
 
         // we are pointing to another btree
@@ -297,6 +300,103 @@ BKey const *BTreeIterator::_next_key() {
     // _bset is null
     // we finished our current node
     return nullptr;
+}
+
+uint64_t benz_uintXX_as_uint64(const uint8_t *bytes, uint8_t sizeof_uint) {
+    switch (sizeof_uint) {
+    case 64:
+        return *(const uint64_t *)(const void *)bytes;
+    case 32:
+        return *(const uint32_t *)(const void *)bytes;
+    case 16:
+        return *(const uint16_t *)(const void *)bytes;
+    case 8:
+        return *(const uint8_t *)bytes;
+    }
+    return (uint64_t)-1;
+}
+
+struct bkey_local parse_bkey(const struct bkey *bkey, const struct bkey_format *format) {
+    // clang-format off
+    struct bkey_local ret = {
+        .u64s = bkey->u64s, 
+        .format = bkey->format, 
+        .needs_whiteout = bkey->needs_whiteout, 
+        .type = bkey->type
+    };
+    // clang-format on
+
+    uint64_t tmp[6]{0};
+
+    if (bkey->format == KEY_FORMAT_LOCAL_BTREE && memcmp(format, &BKEY_FORMAT_SHORT, sizeof(struct bkey_format)) == 0) {
+        debug("1st");
+        const struct bkey_short *bkey_short = (const struct bkey_short *)bkey;
+
+        ret.p        = bkey_short->p;
+        ret.key_u64s = format->key_u64s;
+
+    } else if (bkey->format == KEY_FORMAT_LOCAL_BTREE &&
+               // Does not support field_offset yet
+               memcmp(format->field_offset, tmp, sizeof(format->field_offset)) == 0) {
+        debug("2nd");
+        const uint8_t *bytes = (const uint8_t *)bkey;
+        bytes += format->key_u64s * BCH_U64S_SIZE;
+
+        for (int i = 0; i < BKEY_NR_FIELDS; ++i) {
+            if (format->bits_per_field[i] == 0) {
+                continue;
+            }
+            bytes -= format->bits_per_field[i] / 8;
+            uint64_t value = benz_uintXX_as_uint64(bytes, format->bits_per_field[i]);
+            switch (i) {
+            case BKEY_FIELD_INODE:
+                ret.p.inode = value;
+                break;
+            case BKEY_FIELD_OFFSET:
+                ret.p.offset = value;
+                break;
+            case BKEY_FIELD_SNAPSHOT:
+                ret.p.snapshot = (uint32_t)value;
+                break;
+            case BKEY_FIELD_SIZE:
+                ret.size = (uint32_t)value;
+                break;
+            case BKEY_FIELD_VERSION_HI:
+                ret.version.hi = (uint32_t)value;
+                break;
+            case BKEY_FIELD_VERSION_LO:
+                ret.version.lo = value;
+                break;
+            }
+        }
+        ret.key_u64s = format->key_u64s;
+    } else if (bkey->format == KEY_FORMAT_CURRENT) {
+        debug("3rd");
+        memcpy(&ret, bkey, sizeof(*bkey));
+        ret.key_u64s = BKEY_U64s;
+    } else {
+        debug("4th");
+    }
+    return ret;
+}
+
+DirectoryEntry BTreeIterator::directory(BKey const *key) {
+    if (!key && key->type != KEY_TYPE_dirent) {
+        error("not a directory");
+        return DirectoryEntry();
+    }
+
+    auto iter  = iterator();
+    auto btree = iter._iter.get();
+    auto value = (BDirEnt const *)get_value(btree, key);
+    auto local = parse_bkey(key, &btree->format);
+
+    return DirectoryEntry{
+        .parent_inode = local.p.inode,
+        .inode        = value->d_inum,
+        .type         = value->d_type,
+        .name         = value->d_name,
+    };
 }
 
 std::shared_ptr<BTreeNode> BTreeIterator::load_btree_node(BTreePtr const *ptr) {
