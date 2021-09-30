@@ -137,7 +137,7 @@ Array<JournalSetEntry const *> BCacheFSReader::find_journal_entries(SuperBlockFi
 BTreeIterator BCacheFSReader::iterator(BTreeType type) const {
     auto entry = _btree_roots[type];
 
-    debug("Look for the btree ptr pointing to the node");
+    debug("Look for the btree ptr pointing to the node {} {}", entry->btree_id, type);
     auto btree_ptr = find_btree_root(entry);
 
     //
@@ -227,7 +227,7 @@ BSet const *BSetIterator::next(uint64_t block_size) {
 // BTreeIterator
 // -------------------------------------------------------------------
 BTreeIterator::BTreeIterator(BCacheFSReader const &reader, const BTreePtr *root_ptr, BTreeType type):
-    _reader(reader), _type(type), _ptr(root_ptr) {
+    _reader(reader), _type(type) {
 
     debug("load the btree node");
     _iter = load_btree_node(root_ptr);
@@ -329,27 +329,4 @@ BSet const *next(BSet const *iter, uint64_t block_size, BTreeNode const *node) {
     _cb += (uint64_t)node;
 
     return (BSet const *)_cb;
-}
-
-BSet const *BTreeIterator::find_bset(BTreeNode const *node) {
-    auto btsize = _reader.btree_node_size();
-
-    auto iter       = (BSet const *)&node->keys;
-    auto end        = (BSet const *)(node + btsize);
-    auto block_size = _reader.btree_block_size();
-
-    const struct bset *c = nullptr;
-
-    // find a bset with data in it (u64s > 0)
-    while (iter != end) {
-        if (iter->u64s > 0) {
-            debug("bset found");
-            break;
-        }
-
-        iter = ::next(iter, block_size, node);
-        debug("bset next");
-    };
-
-    return iter;
 }

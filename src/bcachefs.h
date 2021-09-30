@@ -170,8 +170,16 @@ struct BSetIterator {
     BTreeNode const *         node;
 };
 
+// Btree
+//   Node - Chunk in the FS (fread - file) | BCacheFS_next_iter (read next node)
+//      Set BKey + BValue   benz_bch_next_bkey + _BCacheFS_iter_next_bch_val
+//      Set BKey + BValue
+//      ...
+//      Set BKey + BValue
+//   Node - Chunk in the FS (fread - file)
+//
 struct BTreeIterator {
-
+    public:
     BTreeIterator(BCacheFSReader const &reader, const BTreePtr *root_ptr, BTreeType type);
 
     ~BTreeIterator() {}
@@ -181,16 +189,6 @@ struct BTreeIterator {
     BKey const *next_key() { return _next_key(); }
 
     private:
-    // Btree
-    //   Node - Chunk in the FS (fread - file) | BCacheFS_next_iter (read next node)
-    //      Set BKey + BValue   benz_bch_next_bkey + _BCacheFS_iter_next_bch_val
-    //      Set BKey + BValue
-    //      ...
-    //      Set BKey + BValue
-    //   Node - Chunk in the FS (fread - file)
-    //      ..
-    BSet const *find_bset(BTreeNode const *ptr);
-
     BTreeValue const *next_value() {
         auto key = _next_key();
         return get_value(_iter.get(), key);
@@ -202,23 +200,18 @@ struct BTreeIterator {
 
     bool has_children() const { return _children.size() > 0; }
 
+    private:
     BCacheFSReader const &_reader;
     BTreeType const       _type;
-    const BTreePtr *      _ptr = nullptr;
 
     // Memory we need to read a node
-    // we allocate one that
+    // we allocate one that we reuse for the different node we traverse
     std::shared_ptr<BTreeNode> _iter = nullptr;
 
     // Iterators
     BSetIterator         _bset_iterator;
     BKeyIterator         _key_iterator;
     Array<BTreeIterator> _children;
-
-    // Current values
-    BSet const *      _bset  = nullptr;
-    BKey const *      _key   = nullptr;
-    BTreeValue const *_value = nullptr;
 };
 
 #endif
