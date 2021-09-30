@@ -315,8 +315,6 @@ BSet const *next(BSet const *iter, uint64_t block_size, BTreeNode const *node) {
 
     // Bset is located after the blocksize
     // set it a the beginning of the first block
-
-    // uint8_t this will wrap around
     _cb -= (uint64_t)node;
 
     // standard next
