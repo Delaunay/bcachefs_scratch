@@ -16,6 +16,7 @@ int main() {
     BTreeIterator iter = reader.iterator(BTREE_ID_extents);
 
     auto bkey = iter.next_key();
+
     while (bkey != nullptr) {
         printf("bkey: u:%u, f:%u, t:%u, s:%u, o:%lu\n", bkey->u64s, bkey->format, bkey->type, bkey->size,
                bkey->p.offset);

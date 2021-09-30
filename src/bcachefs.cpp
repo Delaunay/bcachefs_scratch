@@ -76,7 +76,7 @@ Superblock *BCacheFSReader::read_superblock() {
 
 SuperBlockFieldBase const *BCacheFSReader::find_superblock_field(SuperBlockFieldType type) const {
     auto iter = FieldIterator<SuperBlockFieldBase>((const uint8_t *)_sblock + sizeof(Superblock));
-    auto end  = FieldIterator<SuperBlockFieldBase>(_sblock + _sblock->u64s * BCH_U64S_SIZE);
+    auto end  = FieldIterator<SuperBlockFieldBase>((const uint8_t *)_sblock + _sblock->u64s * BCH_U64S_SIZE);
 
     for (; iter != end; ++iter) {
         debug("(size: {}) (type: {}) looking for {}", iter->u64s, iter->type, type);
@@ -113,8 +113,8 @@ BTreePtr const *BCacheFSReader::find_btree_root(JournalSetEntry const *entry) co
 
 Array<JournalSetEntry const *> BCacheFSReader::find_journal_entries(SuperBlockFieldClean const *field) const {
 
-    auto iter = FieldIterator<JournalSetEntry>((const uint8_t *)field + sizeof(SuperBlockFieldClean));
-    auto end  = FieldIterator<JournalSetEntry>(field + field->field.u64s * BCH_U64S_SIZE);
+    auto iter = FieldIterator<JournalSetEntry>((uint8_t const *)field + sizeof(SuperBlockFieldClean));
+    auto end  = FieldIterator<JournalSetEntry>((uint8_t const *)field + field->field.u64s * BCH_U64S_SIZE);
 
     Array<JournalSetEntry const *> out(BTREE_ID_NR);
     auto                           type = BCH_JSET_ENTRY_btree_root;
@@ -152,20 +152,19 @@ BTreeIterator BCacheFSReader::iterator(BTreeType type) const {
 // -------------------------------------------------------------------
 BKeyIterator::BKeyIterator(BSet const *bset) {
     assert(bset != nullptr);
-    iter = (const uint8_t *)bset + sizeof(BSet);
-    end  = (BSet const *)(bset + bset->u64s * BCH_U64S_SIZE);
+    iter = (uint8_t const *)bset + sizeof(BSet);
+    end  = (uint8_t const *)(bset + bset->u64s * BCH_U64S_SIZE);
 }
 
 BKey const *BKeyIterator::next() {
     if (iter == nullptr || iter == end) {
-        debug("Iterator is finished");
         return nullptr;
     }
 
     auto val = *iter;
     ++iter;
 
-    if (iter == end || val->u64s == 0) {
+    if (val->u64s == 0) {
         return nullptr;
     }
 
@@ -174,19 +173,25 @@ BKey const *BKeyIterator::next() {
 
 // Bset
 // -------------------------------------------------------------------
-BSetIterator::BSetIterator(BTreeNode const *node_, uint64_t size): node(node_) {
+BSetIterator::BSetIterator(BTreeNode const *node_, uint64_t size):
+    node(node_), iter((uint8_t *)&node->keys), end((uint8_t *)node_ + size) {
+
+    // not really getting what is going on there
+    //
+    // debug("{} = {} - {} | {}", INT(node + size) - INT(&node->keys), INT(node + size), INT(&node->keys), size);
+    // 20971384 = 140454618304528 - 140454597333144 | 131072
+
+    // but this fixes my issue
+    iter.current = (uint8_t const *)INT((uint8_t *)&node->keys);
+    end.current  = (uint8_t const *)INT((uint8_t *)node + size);
+
     assert(node != nullptr);
-
-    // node + sizeof(BTreeNode)
-    // &node->keys
-    iter = ((BSet const *)(&node->keys));
-    end  = ((BSet const *)(node + size));
-
-    debug("Bset (start: {}) (end: {})", INT(&node->keys), INT(node + size));
+    assert((uint8_t *)node < (uint8_t *)&node->keys);
+    assert(iter < end);
 }
 
-BSet const *BSetIterator::offset(uint64_t block_size) {
-    BSet const *v = *iter;
+uint8_t const *BSetIterator::offset(uint64_t block_size) {
+    auto *v = *iter;
 
     const uint8_t *_cb = (const uint8_t *)v;
 
@@ -200,16 +205,22 @@ BSet const *BSetIterator::offset(uint64_t block_size) {
            sizeof(struct bch_csum);
 
     _cb += (uint64_t)node;
-    return (BSet const *)_cb;
+    return _cb;
 }
 
 BSet const *BSetIterator::next(uint64_t block_size) {
+    // this does not get executed, why
     if (iter >= end) {
         return nullptr;
     }
 
     auto val     = *iter;
     iter.current = offset(block_size);
+
+    if (val->u64s == 0) {
+        return next(block_size);
+    }
+
     return val;
 }
 
@@ -277,10 +288,9 @@ BKey const *BTreeIterator::_next_key() {
     auto bset = _bset_iterator.next(_reader.btree_block_size());
 
     if (bset != nullptr) {
-        debug("iterate through a bset: {}", INT(bset));
+        debug("iterate through a bset: {} {}", INT(bset), bset->u64s);
         _key_iterator = BKeyIterator(bset);
-        auto key      = _next_key();
-        return key;
+        return _next_key();
     }
 
     debug("bset is done");

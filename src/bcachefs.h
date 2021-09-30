@@ -113,11 +113,7 @@ inline uint64_t get_u64s(BTreePtr *ptr) {
 
 template <typename T>
 struct FieldIterator {
-
-    template <typename U>
-    FieldIterator(U c): current((T *)c) {}
-
-    FieldIterator(T *c): current(c) {}
+    FieldIterator(uint8_t const *c): current(c) {}
 
     FieldIterator() {}
 
@@ -129,9 +125,9 @@ struct FieldIterator {
 
     bool operator>=(FieldIterator const &b) const { return current >= b.current; }
 
-    T *operator->() { return current; }
+    T *operator->() { return (T *)current; }
 
-    T *operator*() { return current; }
+    T *operator*() { return (T *)current; }
 
     FieldIterator &operator++() {
         next();
@@ -140,11 +136,11 @@ struct FieldIterator {
 
     inline void next() {
         // The the size of the struct and move past it
-        uint64_t u64s = get_u64s<T>(current);
-        current       = (T *)((const uint8_t *)current + u64s * BCH_U64S_SIZE);
+        uint64_t u64s = get_u64s<T>((T *)current);
+        current       = (current + u64s * BCH_U64S_SIZE);
     }
 
-    T *current = nullptr;
+    uint8_t const *current = nullptr;
 };
 
 BTreeValue const *get_value(BTreeNode const *node, const BKey *key);
@@ -163,9 +159,9 @@ struct BKeyIterator {
 // Iterates over all the BSet inside a BNode
 struct BSetIterator {
     BSetIterator() {}
-    BSetIterator(BTreeNode const *node, uint64_t size);
+    explicit BSetIterator(BTreeNode const *node, uint64_t size);
 
-    BSet const *offset(uint64_t block_size);
+    uint8_t const *offset(uint64_t block_size);
 
     BSet const *next(uint64_t block_size);
 
