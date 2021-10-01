@@ -18,7 +18,7 @@ constexpr int __size_src_dir = sizeof(_SOURCE_DIRECTORY) / sizeof(char);
 
 struct CodeLocation {
     CodeLocation(std::string const &file, std::string const &fun, int line, std::string const &fun_long):
-        filename(file.substr(__size_src_dir)), function_name(fun), line(line), function_long(fun_long) {}
+        filename(file.substr(__size_src_dir + 4)), function_name(fun), line(line), function_long(fun_long) {}
 
     std::string filename;
     std::string function_name;

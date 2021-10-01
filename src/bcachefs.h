@@ -180,10 +180,11 @@ struct DirectoryEntry {
 };
 
 inline std::ostream &operator<<(std::ostream &out, DirectoryEntry const &dir) {
-    out << dir.parent_inode << " ";
-    out << dir.inode << " ";
-    out << dir.type << " ";
-    return out << (const char *)dir.name;
+    out << "p:" << dir.parent_inode << " ";
+    out << "i:" << dir.inode << " ";
+    out << "t:" << (unsigned int)(dir.type) << " ";
+    out << "s:" << (const char *)dir.name << " ";
+    return out;
 }
 
 struct Extend {
@@ -194,10 +195,16 @@ struct Extend {
 };
 
 inline std::ostream &operator<<(std::ostream &out, Extend const &ext) {
-    out << ext.inode << " ";
-    out << ext.file_offset << " ";
-    out << ext.offset << " ";
-    out << ext.size;
+
+    out << "f:" << ext.file_offset << " ";
+    out << "i:" << ext.inode << " ";
+    out << "o:" << ext.offset << " ";
+    out << "s:" << ext.size;
+    return out;
+}
+
+inline std::ostream &operator<<(std::ostream &out, BKey const &bkey) {
+    printf(" - bkey: u:%u, f:%u, t:%u, s:%u, o:%lu", bkey.u64s, bkey.format, bkey.type, bkey.size, bkey.p.offset);
     return out;
 }
 

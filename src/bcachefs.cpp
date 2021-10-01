@@ -250,7 +250,7 @@ BValue const *get_value(BTreeNode const *node, const BKey *key) {
         key_u64s = BKEY_U64s;
     }
 
-    return (BValue const *)((uint8_t const *)key + key_u64s);
+    return (BValue const *)((uint8_t const *)key + key_u64s * BCH_U64S_SIZE);
 }
 
 BKey const *BTreeIterator::_next_key() {

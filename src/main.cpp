@@ -20,10 +20,10 @@ int main() {
         auto bkey = iter.next_key();
 
         while (bkey != nullptr) {
-            printf("bkey: u:%u, f:%u, t:%u, s:%u, o:%lu\n", bkey->u64s, bkey->format, bkey->type, bkey->size,
-                   bkey->p.offset);
+            std::cout << *bkey << std::endl;
 
-            std::cout << iter.extend(bkey) << "\n";
+            auto ext = iter.extend(bkey);
+            std::cout << "    - ext " << ext << "\n";
 
             bkey = iter.next_key();
         }
@@ -36,10 +36,10 @@ int main() {
         auto bkey = iter.next_key();
 
         while (bkey != nullptr) {
-            printf("bkey: u:%u, f:%u, t:%u, s:%u, o:%lu\n", bkey->u64s, bkey->format, bkey->type, bkey->size,
-                   bkey->p.offset);
+            std::cout << *bkey << std::endl;
 
-            std::cout << iter.directory(bkey) << "\n";
+            auto dir = iter.directory(bkey);
+            std::cout << "    - dirent " << dir << "\n";
 
             bkey = iter.next_key();
         }
