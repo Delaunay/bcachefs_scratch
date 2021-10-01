@@ -229,7 +229,7 @@ BSet const *BSetIterator::next(uint64_t block_size) {
 // BTreeIterator
 // -------------------------------------------------------------------
 BTreeIterator::BTreeIterator(BCacheFSReader const &reader, const BTreePtr *root_ptr, BTreeType type):
-    _reader(reader), _type(type) {
+    _reader(reader), _type(type), _ptr(root_ptr) {
 
     debug("load the btree node");
     _iter = load_btree_node(root_ptr);
@@ -269,7 +269,6 @@ BKey const *BTreeIterator::_next_key() {
 
     // get next key in the current bset
     auto key = _key_iterator.next();
-    std::cout << directory(key) << std::endl;
 
     if (key != nullptr) {
 
@@ -381,7 +380,12 @@ struct bkey_local parse_bkey(const struct bkey *bkey, const struct bkey_format *
 }
 
 DirectoryEntry BTreeIterator::directory(BKey const *key) {
-    if (!key && key->type != KEY_TYPE_dirent) {
+    if (!key) {
+        error("null key");
+        return DirectoryEntry();
+    }
+
+    if (key->type != KEY_TYPE_dirent) {
         error("not a directory");
         return DirectoryEntry();
     }
@@ -397,6 +401,49 @@ DirectoryEntry BTreeIterator::directory(BKey const *key) {
         .type         = value->d_type,
         .name         = value->d_name,
     };
+}
+
+Extend BTreeIterator::extend(BKey const *key) {
+    if (!key) {
+        error("null key");
+        return Extend();
+    }
+
+    if (key->type != KEY_TYPE_extent && key->type != KEY_TYPE_inline_data) {
+        error("not a directory");
+        return Extend();
+    }
+
+    auto iter  = iterator();
+    auto btree = iter._iter.get();
+    auto local = parse_bkey(key, &btree->format);
+    auto ext   = Extend{};
+    auto val   = get_value(btree, key);
+
+    if (key->type == KEY_TYPE_extent) {
+        debug("extend - extend ptr");
+
+        auto value      = (BExtendPtr const *)val;
+        ext.file_offset = (key->p.offset - key->size) * BCH_SECTOR_SIZE;
+        ext.offset      = value->offset * BCH_SECTOR_SIZE;
+        ext.size        = key->size * BCH_SECTOR_SIZE;
+
+    } else if (key->type == KEY_TYPE_inline_data) {
+        debug("extend - inline data");
+        ext.file_offset = (key->p.offset - key->size) * BCH_SECTOR_SIZE;
+        ext.offset      = 0;
+        ext.size        = key->u64s * BCH_U64S_SIZE;
+
+        //
+        auto     start  = _ptr->start->offset * BCH_SECTOR_SIZE;
+        uint64_t offset = (uint64_t)((const uint8_t *)val - (const uint8_t *)btree) + start;
+
+        ext.offset = offset;
+        ext.size -= (uint64_t)((const uint8_t *)val - (const uint8_t *)key);
+    } else {
+    }
+
+    return ext;
 }
 
 std::shared_ptr<BTreeNode> BTreeIterator::load_btree_node(BTreePtr const *ptr) {

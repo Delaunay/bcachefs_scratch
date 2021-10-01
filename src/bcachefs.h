@@ -26,11 +26,12 @@ using JournalSetEntryType = enum bch_jset_entry_type;
 using JournalSetEntry     = struct jset_entry;
 using BTreeType           = enum btree_id;
 
-using BTreePtr = struct bch_btree_ptr_v2;
-using BKeyType = enum bch_bkey_type;
-using BKey     = struct bkey;
-using BValue   = struct bch_val;
-using BDirEnt  = struct bch_dirent;
+using BTreePtr   = struct bch_btree_ptr_v2;
+using BKeyType   = enum bch_bkey_type;
+using BKey       = struct bkey;
+using BValue     = struct bch_val;
+using BDirEnt    = struct bch_dirent;
+using BExtendPtr = struct bch_extent_ptr;
 
 using BTreeNode = struct btree_node;
 using BSet      = struct bset;
@@ -185,6 +186,21 @@ inline std::ostream &operator<<(std::ostream &out, DirectoryEntry const &dir) {
     return out << (const char *)dir.name;
 }
 
+struct Extend {
+    uint64_t inode;
+    uint64_t file_offset;
+    uint64_t offset;
+    uint64_t size;
+};
+
+inline std::ostream &operator<<(std::ostream &out, Extend const &ext) {
+    out << ext.inode << " ";
+    out << ext.file_offset << " ";
+    out << ext.offset << " ";
+    out << ext.size;
+    return out;
+}
+
 // Btree
 //   Node - Chunk in the FS (fread - file) | BCacheFS_next_iter (read next node)
 //      Set BKey + BValue   benz_bch_next_bkey + _BCacheFS_iter_next_bch_val
@@ -204,6 +220,8 @@ struct BTreeIterator {
     BKey const *next_key() { return _next_key(); }
 
     DirectoryEntry directory(BKey const *key);
+
+    Extend extend(BKey const *key);
 
     private:
     BValue const *next_value() {
@@ -228,6 +246,7 @@ struct BTreeIterator {
     private:
     BCacheFSReader const &_reader;
     BTreeType const       _type;
+    const BTreePtr *      _ptr;
 
     // Memory we need to read a node
     // we allocate one that we reuse for the different node we traverse
@@ -237,6 +256,14 @@ struct BTreeIterator {
     BSetIterator         _bset_iterator;
     BKeyIterator         _key_iterator;
     Array<BTreeIterator> _children;
+};
+
+union Value {
+    struct bch_dirent       dirent;
+    struct bch_inode        inode;
+    struct bch_extent       extend;
+    struct bch_btree_ptr_v2 btree;
+    struct bch_inline_data  inlinedata;
 };
 
 #endif

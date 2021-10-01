@@ -7,11 +7,18 @@
 // only use the fmt header
 #include <spdlog/fmt/bundled/core.h>
 
+#include "version.h"
+
 namespace bcachefs {
+
+// Path to repository on current system
+constexpr char __source_dir[] = _SOURCE_DIRECTORY;
+// Length of the path so we can cut unimportant folders
+constexpr int __size_src_dir = sizeof(_SOURCE_DIRECTORY) / sizeof(char);
 
 struct CodeLocation {
     CodeLocation(std::string const &file, std::string const &fun, int line, std::string const &fun_long):
-        filename(file), function_name(fun), line(line), function_long(fun_long) {}
+        filename(file.substr(__size_src_dir)), function_name(fun), line(line), function_long(fun_long) {}
 
     std::string filename;
     std::string function_name;

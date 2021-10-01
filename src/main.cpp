@@ -23,6 +23,8 @@ int main() {
             printf("bkey: u:%u, f:%u, t:%u, s:%u, o:%lu\n", bkey->u64s, bkey->format, bkey->type, bkey->size,
                    bkey->p.offset);
 
+            std::cout << iter.extend(bkey) << "\n";
+
             bkey = iter.next_key();
         }
     }
